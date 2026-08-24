@@ -126,6 +126,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC',sans
 .chat-head h3 .dot{width:6px;height:6px;border-radius:50%;background:#22c55e;animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .chat-head .close-btn{background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:2px}
+.win-btns{display:flex;align-items:center;gap:2px;margin-left:8px;flex-shrink:0}
+.win-btn{width:22px;height:22px;border-radius:4px;border:none;background:transparent;color:var(--text3);font-size:12px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:background .15s,color .15s}
+.win-btn:hover{background:rgba(0,0,0,.08);color:var(--text)}
+.win-btn.win-close:hover{background:#e5484d;color:#fff}
+.chat-dialog{user-select:none}
+.resize-h{position:absolute;width:16px;height:16px;z-index:10}
+.resize-h.nw{top:0;left:0;cursor:nwse-resize}
+.resize-h.ne{top:0;right:0;cursor:nesw-resize}
+.resize-h.sw{bottom:0;left:0;cursor:nesw-resize}
+.resize-h.se{bottom:0;right:0;cursor:nwse-resize}
+/* 四条边：靠近边缘即显示拖拽光标，可拉长/收窄窗口 */
+.resize-h.n{top:0;left:6px;right:6px;width:auto;height:6px;cursor:ns-resize}
+.resize-h.s{bottom:0;left:6px;right:6px;width:auto;height:6px;cursor:ns-resize}
+.resize-h.w{left:0;top:6px;bottom:6px;width:6px;height:auto;cursor:ew-resize}
+.resize-h.e{right:0;top:6px;bottom:6px;width:6px;height:auto;cursor:ew-resize}
+.resize-h:hover{background:rgba(0,0,0,.06)}
 .chat-head .close-btn:hover{color:var(--text)}
 .chat-body{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
 .chat-msg{display:flex;gap:10px;max-width:100%}
@@ -360,9 +376,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC',sans
 <div class="chat-overlay" id="chat-overlay">
   <div class="chat-dialog" id="chat-dialog">
     <div class="chat-head" id="chat-head" onmousedown="dragStart(event)" ontouchstart="dragStart(event)">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <h3 style="margin:0"><span class="dot"></span> <span data-i18n="aiAssistant">AI Code Assistant</span></h3>
-        <div class="model-dropdown" id="model-select-wrap">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:nowrap;min-width:0;flex-shrink:1">
+        <h3 style="margin:0;white-space:nowrap;flex-shrink:0"><span class="dot"></span> <span data-i18n="aiAssistant">AI Code Assistant</span></h3>
+        <div class="model-dropdown" id="model-select-wrap" style="flex-shrink:0">
       <button class="model-dropdown-btn" onclick="toggleModelDropdown(event)" id="model-select-btn">
         <span class="model-dropdown-text" id="model-select-text">Qwen3.8-27B</span>
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l3 3 3-3"/></svg>
@@ -370,8 +386,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC',sans
       <div class="model-dropdown-menu" id="model-select-menu"></div>
     </div>
       </div>
-      <button class="nav-btn ghost" style="padding:4px 8px;font-size:11px" onclick="resetChat()" data-i18n-title="resetChat" data-i18n="resetChat" title="重置对话">&#8635; 重置</button>
-      <button class="close-btn" onclick="toggleChat()">&#10005;</button>
+      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+        <button class="nav-btn ghost" style="padding:4px 8px;font-size:11px" onclick="resetChat()" data-i18n-title="resetChat" data-i18n="resetChat" title="重置对话">&#8635; 重置</button>
+        <div class="win-btns">
+          <button class="win-btn" onclick="minimizeChat()" title="最小化">&#x2013;</button>
+          <button class="win-btn" id="win-max-btn" onclick="toggleMaxChat()" title="最大化">&#9723;</button>
+          <button class="win-btn win-close" onclick="toggleChat()" title="关闭">&#10005;</button>
+        </div>
+      </div>
     </div>
     <div class="chat-body" id="chat-body">
       <div class="welcome">
@@ -396,6 +418,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC',sans
         </button>
       </div>
     </div>
+    <div class="resize-h n" onmousedown="resizeStart(event,'n')" ontouchstart="resizeStart(event,'n')"></div>
+    <div class="resize-h s" onmousedown="resizeStart(event,'s')" ontouchstart="resizeStart(event,'s')"></div>
+    <div class="resize-h w" onmousedown="resizeStart(event,'w')" ontouchstart="resizeStart(event,'w')"></div>
+    <div class="resize-h e" onmousedown="resizeStart(event,'e')" ontouchstart="resizeStart(event,'e')"></div>
+    <div class="resize-h nw" onmousedown="resizeStart(event,'nw')" ontouchstart="resizeStart(event,'nw')"></div>
+    <div class="resize-h ne" onmousedown="resizeStart(event,'ne')" ontouchstart="resizeStart(event,'ne')"></div>
+    <div class="resize-h sw" onmousedown="resizeStart(event,'sw')" ontouchstart="resizeStart(event,'sw')"></div>
+    <div class="resize-h se" onmousedown="resizeStart(event,'se')" ontouchstart="resizeStart(event,'se')"></div>
   </div>
 </div>
 
@@ -696,10 +726,33 @@ function toggleChat(){
   o.classList.toggle('show');
   document.getElementById('chat-fab').style.display=o.classList.contains('show')?'none':'flex';
   if(o.classList.contains('show')&&!d.style.left&&!d.style.right){d.style.bottom='24px';d.style.right='24px'}
+  if(o.classList.contains('show'))fitChatHeadWidth();
   }catch(e){}}
+// 窗口默认尺寸自适应：首次打开时宽度按标题栏内容一行放下为准，高度按视口收进屏幕内（不显示到屏幕外）
+function fitChatHeadWidth(){
+  try{
+    var d=document.getElementById('chat-dialog'),h=document.getElementById('chat-head');
+    if(!d||!h)return;
+    var maxW=window.innerWidth-24;
+    var prev=d.style.width;
+    d.style.width=maxW+'px';            // 临时放宽，取各子元素自然宽度（关键元素均已 flex-shrink:0）
+    var kids=h.children, need=0;
+    for(var i=0;i<kids.length;i++) need+=kids[i].offsetWidth;
+    need+=34;                           // chat-head 左右 padding 32 + 边框 2
+    // 宽度：标题栏自然宽度，但不超过视口（避免出界）
+    d.style.width=Math.max(320,Math.min(need+4,maxW))+'px';
+    // 高度：默认 540，但不超过视口（顶部留 16、底部留 24），保证整个窗口都在屏幕内
+    var maxH=window.innerHeight-40;
+    var curH=d.getBoundingClientRect().height || 540;
+    d.style.height=Math.max(280,Math.min(curH,maxH))+'px';
+    if(!d.style.left&&!d.style.top){d.style.bottom='24px';d.style.right='24px'}
+  }catch(e){}
+}
 let dragData=null;
 function dragStart(e){
+  if(e.target.closest('.resize-h'))return; // 缩放手柄不触发拖动
   if(e.target.tagName==='BUTTON'||e.target.closest('button')||e.target.closest('.model-dropdown'))return;
+  if(maximized)restorePrev();
   e.preventDefault();
   var t=e.touches?e.touches[0]:e;
   var d=document.getElementById('chat-dialog');
@@ -723,6 +776,65 @@ function dragMove(e){
 function dragEnd(){dragData=null;
   document.removeEventListener('mousemove',dragMove);document.removeEventListener('mouseup',dragEnd);
   document.removeEventListener('touchmove',dragMove);document.removeEventListener('touchend',dragEnd);
+}
+// ---- 窗口缩放（四角手柄：nw/ne/sw/se）----
+let resizeData=null,maximized=false,prevRect=null;
+function resizeStart(e,pos){
+  if(e.target.closest('button'))return;
+  if(maximized)restorePrev();
+  var t=e.touches?e.touches[0]:e;
+  var d=document.getElementById('chat-dialog');
+  var r=d.getBoundingClientRect();
+  resizeData={pos:pos,sx:t.clientX,sy:t.clientY,l:r.left,top:r.top,w:r.width,h:r.height};
+  e.preventDefault();
+  document.addEventListener('mousemove',resizeMove);document.addEventListener('mouseup',resizeEnd);
+  document.addEventListener('touchmove',resizeMove,{passive:false});document.addEventListener('touchend',resizeEnd);
+}
+function resizeMove(e){
+  if(!resizeData)return;e.preventDefault();
+  var t=e.touches?e.touches[0]:e;
+  var dx=t.clientX-resizeData.sx,dy=t.clientY-resizeData.sy;
+  var vw=window.innerWidth,vh=window.innerHeight,minW=360,minH=420;
+  var w=resizeData.w,h=resizeData.h,l=resizeData.l,top=resizeData.top;
+  if(resizeData.pos.indexOf('e')>=0)w=resizeData.w+dx;
+  if(resizeData.pos.indexOf('s')>=0)h=resizeData.h+dy;
+  if(resizeData.pos.indexOf('w')>=0){w=resizeData.w-dx;l=resizeData.l+dx}
+  if(resizeData.pos.indexOf('n')>=0){h=resizeData.h-dy;top=resizeData.top+dy}
+  l=Math.max(0,l);top=Math.max(0,top);
+  w=Math.max(minW,Math.min(w,vw-l));h=Math.max(minH,Math.min(h,vh-top));
+  var d=document.getElementById('chat-dialog');
+  d.style.width=w+'px';d.style.height=h+'px';
+  d.style.left=l+'px';d.style.top=top+'px';
+  d.style.bottom='auto';d.style.right='auto';
+}
+function resizeEnd(){
+  resizeData=null;
+  document.removeEventListener('mousemove',resizeMove);document.removeEventListener('mouseup',resizeEnd);
+  document.removeEventListener('touchmove',resizeMove);document.removeEventListener('touchend',resizeEnd);
+}
+// ---- 最小化 / 最大化 / 还原（Windows 风格三件套）----
+function minimizeChat(){
+  var o=document.getElementById('chat-overlay');
+  o.classList.remove('show');
+  document.getElementById('chat-fab').style.display='flex';
+}
+function toggleMaxChat(){
+  if(maximized)return restorePrev();
+  var d=document.getElementById('chat-dialog');
+  var r=d.getBoundingClientRect();
+  prevRect={l:r.left,top:r.top,w:r.width,h:r.height};
+  maximized=true;
+  d.style.left='0px';d.style.top='0px';d.style.width='100%';d.style.height='100%';
+  d.style.bottom='auto';d.style.right='auto';
+  var b=document.getElementById('win-max-btn');
+  b.textContent='\u2750';b.title='还原';
+}
+function restorePrev(){
+  var d=document.getElementById('chat-dialog');
+  if(prevRect){d.style.left=prevRect.l+'px';d.style.top=prevRect.top+'px';d.style.width=prevRect.w+'px';d.style.height=prevRect.h+'px'}
+  maximized=false;prevRect=null;
+  var b=document.getElementById('win-max-btn');
+  b.textContent='\u25A1';b.title='最大化';
 }
 
 function switchModel(id){

@@ -439,6 +439,23 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_prices(self):
+        """模型价格实时同步：每次请求实时从 llmapi (/api/models) 拉取最新单次价格，后端改价前端即同步显示"""
+        try:
+            req = urllib.request.Request('http://127.0.0.1:6000/api/models',
+                                         headers={'User-Agent': 'nowcoding-price-sync'})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read().decode('utf-8', 'replace'))
+            prices = {}
+            for s in data.get('suppliers', []):
+                for m in s.get('models', []):
+                    prices[m['name']] = m.get('price_per_request') or 0
+            self._send_json(200, {'prices': prices},
+                            {'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+                             'Pragma': 'no-cache'})
+        except Exception as e:
+            self._send_json(502, {'error': 'prices unavailable: ' + str(e)})
+
     def _proxy_llm(self, method, upstream_path=None, upstream=None, body=None):
         parsed = urlparse(self.path)
         path = upstream_path or parsed.path
@@ -493,6 +510,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         elif p == '/api/suggestions': self._send_suggestions()
         elif p == '/api/fetch-url': self._fetch_url()
         elif p == '/api/stats/visit': self._send_json(200, _stats_visit(self.headers, self.client_address))
+        elif p == '/api/prices': self._send_prices()
         elif p == '/api/stats': self._send_json(200, _stats_get(self.headers, self.client_address))
         else: super().do_GET()
 

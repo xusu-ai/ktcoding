@@ -111,12 +111,12 @@ button{font-family:inherit;cursor:pointer}
     <div class="access-row"><b data-i18n="accessQuery">查询额度使用情况：</b><a href="quota.html" data-i18n="accessQueryVal">点击「我的算力」，输入自己的 API Key，即可查询</a></div>
     <p class="access-models" data-i18n="accessModels">支持模型：根据你购买的套餐来提供，本站能支持模型以及单次调用的价格如下：</p>
     <ul class="price-list">
-      <li>deepseek-v4-flash<span class="ctx">1M</span><b>¥0.06</b></li>
-      <li>DS4F<span class="ctx">1M</span><b>¥0.06</b></li>
-      <li>Qwen3.8-27B<span class="ctx">1M</span><b>¥0.03</b></li>
-      <li>deepseek-v4-pro<span class="ctx">1M</span><b>¥0.18</b></li>
-      <li>glm-5.2<span class="ctx">200K</span><b>¥0.2</b></li>
-      <li>kimi-k3<span class="ctx">256K</span><b>¥0.86</b></li>
+      <li>deepseek-v4-flash<span class="ctx">1M</span><b class="price" data-price-model="deepseek-v4-flash">¥…</b></li>
+      <li>DS4F<span class="ctx">1M</span><b class="price" data-price-model="DS4F">¥…</b></li>
+      <li>Qwen3.8-27B<span class="ctx">850K</span><b class="price" data-price-model="Qwen3.8-27B">¥…</b></li>
+      <li>deepseek-v4-pro<span class="ctx">1M</span><b class="price" data-price-model="deepseek-v4-pro">¥…</b></li>
+      <li>glm-5.2<span class="ctx">200K</span><b class="price" data-price-model="glm-5.2">¥…</b></li>
+      <li>kimi-k3<span class="ctx">256K</span><b class="price" data-price-model="kimi-k3">¥…</b></li>
     </ul>
   </section>
   <section class="access-card">
@@ -191,6 +191,20 @@ function applyLang(){
 function toggleLang(){lang=lang==='zh'?'en':'zh';localStorage.setItem(LK,lang);applyLang()}
 try{const s=localStorage.getItem(LK);if(s==='en'||s==='zh')lang=s}catch(e){}
 applyLang();
+</script>
+<script>
+// 前端价格实时同步：从 /api/prices（server.py → llmapi /api/models）实时拉取最新单次价格，后端改价前端即同步显示
+(async () => {
+  try {
+    const r = await fetch("/api/prices", { cache: "no-store" });
+    const d = await r.json();
+    const prices = d.prices || {};
+    document.querySelectorAll("[data-price-model]").forEach((el) => {
+      const p = prices[el.dataset.priceModel];
+      el.textContent = (p != null && p > 0) ? "¥" + p : "¥—";
+    });
+  } catch (e) { /* 拉取失败保留占位 ¥… */ }
+})();
 </script>
 </body>
 </html>
