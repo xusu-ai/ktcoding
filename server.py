@@ -14,7 +14,7 @@ PROJECTS_DIR = os.path.join(DIR, 'projects')
 PROJECTS_JSON = os.path.join(PROJECTS_DIR, 'projects.json')
 UPSTREAM_LLM = 'http://127.0.0.1:8104'
 MODEL_ROUTES = {
-    'Qwen3.8-27B': 'http://127.0.0.1:8106',
+    'Qwen3.8-27B': 'http://127.0.0.1:8105',
 }
 
 def _upstream_for(model):
