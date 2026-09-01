@@ -380,7 +380,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC',sans
         <h3 style="margin:0;white-space:nowrap;flex-shrink:0"><span class="dot"></span> <span data-i18n="aiAssistant">AI Code Assistant</span></h3>
         <div class="model-dropdown" id="model-select-wrap" style="flex-shrink:0">
       <button class="model-dropdown-btn" onclick="toggleModelDropdown(event)" id="model-select-btn">
-        <span class="model-dropdown-text" id="model-select-text">Qwen3.8-27B</span>
+        <span class="model-dropdown-text" id="model-select-text">加载中…</span>
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4l3 3 3-3"/></svg>
       </button>
       <div class="model-dropdown-menu" id="model-select-menu"></div>
@@ -461,11 +461,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC',sans
 /* 访问统计埋点:记录独立 IP 与点击数(失败静默,不影响页面) */
 try{fetch('/api/stats/visit')}catch(e){}
 const SK='showcode_projects',CK='showcode_chat',LK='showcode_lang',MK='showcode_model';
-const MODELS=[
-  {id:'qwen3',name:'Qwen3.8-27B',model:'Qwen3.8-27B'},
-  {id:'deepseek',name:'deepseek-v4-flash',model:'deepseek-v4-flash'}
-];
-let curModel=MODELS[0];
+let MODELS=[]; // 动态从模型目录(/api/models)加载：{id,name,model}
+const MODELS_FALLBACK=[
+  {id:'Qwen3.8-27B',name:'Qwen3.8-27B',model:'Qwen3.8-27B'},
+  {id:'deepseek-v4-flash',name:'deepseek-v4-flash',model:'deepseek-v4-flash'}
+]; // 目录不可达时的兜底
+let curModel=null;
 let lang='zh',projects=[],chat=[],mid=null,tab='latest',search='',lastCode='',gen=false,pt,activeEditor='html',deviceMode='desktop',fitActive=true,currentPage='editor';
 const PAGE_SIZE=12;let visibleCount=0,renderingMore=false,scrollObserver=null;
 let edh,edc,edj,pf,ci;
@@ -492,7 +493,15 @@ function init(){
   pf=document.getElementById('preview-frame');ci=document.getElementById('chat-input');
   if(!edh||!pf||!ci){showAlert('Page error: missing elements');return}
   try{lang=localStorage.getItem(LK)||'zh'}catch(e){lang='zh'}
-  try{var sm=localStorage.getItem(MK);if(sm){var fm=MODELS.find(function(m){return m.id===sm});if(fm)curModel=fm}}catch(e){}
+  try{var sm=localStorage.getItem(MK);if(sm&&MODELS.length){var fm=MODELS.find(function(m){return m.id===sm});if(fm)curModel=fm}}catch(e){}
+  // 模型下拉实时同步：引用 llmapi 模型目录(/api/models)，加载完成后填充（含本地缓存模型恢复）
+  fetch('/api/models',{cache:'no-store'}).then(function(r){return r.json()}).then(function(d){
+    MODELS=(d.models||[]).filter(function(m){return m.name}).map(function(m){return {id:m.name,name:m.name,model:m.upstream_model||m.name}});
+    if(!MODELS.length)MODELS=MODELS_FALLBACK.slice();
+    try{var sm=localStorage.getItem(MK);if(sm){var fm=MODELS.find(function(m){return m.id===sm});if(fm)curModel=fm}}catch(e){}
+    if(!curModel)curModel=MODELS[0];
+    populateModelDropdown();
+  }).catch(function(){MODELS=MODELS_FALLBACK.slice();curModel=MODELS[0];populateModelDropdown()});
   // populate model dropdown
   populateModelDropdown();
   applyLang();
@@ -848,6 +857,7 @@ function switchModel(id){
 function populateModelDropdown(){
   var menu=document.getElementById('model-select-menu');
   if(!menu)return;
+  if(!MODELS.length||!curModel)return; // 模型目录尚未加载完成
   menu.innerHTML=MODELS.map(function(m){return '<div class="model-dropdown-item'+(m.id===curModel.id?' active':'')+'" data-id="'+m.id+'">'+m.name+'</div>'}).join('');
   document.getElementById('model-select-text').textContent=curModel.name;
 }

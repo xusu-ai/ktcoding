@@ -456,6 +456,35 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         except Exception as e:
             self._send_json(502, {'error': 'prices unavailable: ' + str(e)})
 
+    def _send_models(self):
+        """模型目录同步：代理 llmapi /api/models，供 nowcoding 各页面直接引用模型目录的模型名。
+        只返回可用（status=up 或云端未探测）的真实模型：排除 mock、排除未通端口的占位模型。"""
+        try:
+            req = urllib.request.Request('http://127.0.0.1:6000/api/models',
+                                         headers={'User-Agent': 'nowcoding-model-sync'})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read().decode('utf-8', 'replace'))
+            models = []
+            for s in data.get('suppliers', []):
+                if s.get('kind') == 'mock':
+                    continue
+                for m in s.get('models', []):
+                    if m.get('status') not in (None, 'up'):
+                        continue  # 未通端口不向客户展示（板块仍实时监控）
+                    models.append({
+                        'name': m['name'],
+                        'upstream_model': m.get('upstream_model') or m['name'],
+                        'price_per_request': m.get('price_per_request') or 0,
+                        'context_length': m.get('context_length') or 0,
+                        'supplier': s.get('supplier'),
+                        'base_url': s.get('base_url'),
+                    })
+            self._send_json(200, {'models': models},
+                            {'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+                             'Pragma': 'no-cache'})
+        except Exception as e:
+            self._send_json(502, {'error': 'models unavailable: ' + str(e)})
+
     def _proxy_llm(self, method, upstream_path=None, upstream=None, body=None):
         parsed = urlparse(self.path)
         path = upstream_path or parsed.path
@@ -511,6 +540,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         elif p == '/api/fetch-url': self._fetch_url()
         elif p == '/api/stats/visit': self._send_json(200, _stats_visit(self.headers, self.client_address))
         elif p == '/api/prices': self._send_prices()
+        elif p == '/api/models': self._send_models()
         elif p == '/api/stats': self._send_json(200, _stats_get(self.headers, self.client_address))
         else: super().do_GET()
 

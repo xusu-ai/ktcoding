@@ -110,14 +110,7 @@ button{font-family:inherit;cursor:pointer}
     <div class="access-row"><b data-i18n="accessShop">淘宝店：</b><a href="https://shop391133326.taobao.com/" target="_blank" rel="noopener">快兔算力</a></div>
     <div class="access-row"><b data-i18n="accessQuery">查询额度使用情况：</b><a href="quota.html" data-i18n="accessQueryVal">点击「我的算力」，输入自己的 API Key，即可查询</a></div>
     <p class="access-models" data-i18n="accessModels">支持模型：根据你购买的套餐来提供，本站能支持模型以及单次调用的价格如下：</p>
-    <ul class="price-list">
-      <li>deepseek-v4-flash<span class="ctx">1M</span><b class="price" data-price-model="deepseek-v4-flash">¥…</b></li>
-      <li>DS4F<span class="ctx">1M</span><b class="price" data-price-model="DS4F">¥…</b></li>
-      <li>Qwen3.8-27B<span class="ctx">500K</span><b class="price" data-price-model="Qwen3.8-27B">¥…</b></li>
-      <li>deepseek-v4-pro<span class="ctx">1M</span><b class="price" data-price-model="deepseek-v4-pro">¥…</b></li>
-      <li>glm-5.2<span class="ctx">200K</span><b class="price" data-price-model="glm-5.2">¥…</b></li>
-      <li>kimi-k3<span class="ctx">256K</span><b class="price" data-price-model="kimi-k3">¥…</b></li>
-    </ul>
+    <ul class="price-list" id="model-price-list"><li class="model-loading">加载中…</li></ul>
   </section>
   <section class="access-card">
     <h2 data-i18n="exTitle">模型使用示例（curl · OpenAI 兼容接入）</h2>
@@ -193,18 +186,32 @@ try{const s=localStorage.getItem(LK);if(s==='en'||s==='zh')lang=s}catch(e){}
 applyLang();
 </script>
 <script>
-// 前端价格实时同步：从 /api/prices（server.py → llmapi /api/models）实时拉取最新单次价格，后端改价前端即同步显示
+// 模型列表实时同步：从 /api/models（server.py → llmapi 模型目录）实时拉取模型名/上下文窗口/单次价格，
+// 页面显示的模型名字直接引用模型目录（上游供应商）板块，后端增删/改名/改价前端即同步
 (async () => {
+  const fmtCtx = (n) => {
+    if (!n || n <= 0) return "";
+    if (n >= 1000000) return (n / 1000000).toFixed(n % 1000000 ? 1 : 0).replace(/\.0$/, "") + "M";
+    if (n >= 1000) return Math.round(n / 1000) + "K";
+    return String(n);
+  };
   try {
-    const r = await fetch("/api/prices", { cache: "no-store" });
+    const r = await fetch("/api/models", { cache: "no-store" });
     const d = await r.json();
-    const prices = d.prices || {};
-    document.querySelectorAll("[data-price-model]").forEach((el) => {
-      const p = prices[el.dataset.priceModel];
-      el.textContent = (p != null && p > 0) ? "¥" + p : "¥—";
-    });
-  } catch (e) { /* 拉取失败保留占位 ¥… */ }
+    const list = d.models || [];
+    const el = document.getElementById("model-price-list");
+    if (!el) return;
+    if (!list.length) {
+      el.innerHTML = '<li class="dim">暂无可用模型</li>';
+      return;
+    }
+    el.innerHTML = list.map((m) => {
+      const ctx = fmtCtx(m.context_length);
+      return `<li>${esc(m.name)}${ctx ? `<span class="ctx">${ctx}</span>` : ""}<b>${(m.price_per_request && m.price_per_request > 0) ? "¥" + m.price_per_request : "¥—"}</b></li>`;
+    }).join("");
+  } catch (e) { /* 拉取失败保留占位 */ }
 })();
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
 </script>
 </body>
 </html>
