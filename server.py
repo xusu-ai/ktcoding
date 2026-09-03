@@ -472,7 +472,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     if m.get('status') not in (None, 'up'):
                         continue  # 未通端口不向客户展示（板块仍实时监控）
                     models.append({
-                        'name': m['name'],
+                        'name': m.get('upstream_model') or m['name'],  # 直接引用网关内部模型名（上游/本地端口真实模型 id）
                         'upstream_model': m.get('upstream_model') or m['name'],
                         'price_per_request': m.get('price_per_request') or 0,
                         'context_length': m.get('context_length') or 0,
@@ -484,6 +484,57 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                              'Pragma': 'no-cache'})
         except Exception as e:
             self._send_json(502, {'error': 'models unavailable: ' + str(e)})
+
+    def _send_local_models(self):
+        """本地算力模型面板数据（仅 ui.html AI 助手下拉用）：固定展示 8104/8105 两个本地端口。
+        端口可达 → 显示端口实际提供的模型名（llmapi 实时探测的 detected_model）；
+        端口不通 → models 为空，前端显示 "no model"。始终返回这两个端口的条目（不隐藏）。"""
+        LOCAL_PORTS = [
+            {'port': 8105, 'base_url': 'http://127.0.0.1:8105/v1', 'label': '127.0.0.1:8105'},
+            {'port': 8104, 'base_url': 'http://127.0.0.1:8104/v1', 'label': '127.0.0.1:8104'},
+        ]
+        try:
+            req = urllib.request.Request('http://127.0.0.1:6000/api/models',
+                                         headers={'User-Agent': 'nowcoding-local-models'})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read().decode('utf-8', 'replace'))
+            # 按 base_url 建索引：同一本地端口可能对应多个目录条目（别名/不同 name）
+            by_base = {}
+            for s in data.get('suppliers', []):
+                if s.get('kind') != 'local':
+                    continue
+                for m in s.get('models', []):
+                    by_base.setdefault(s.get('base_url'), []).append(m)
+            entries = []
+            for p in LOCAL_PORTS:
+                ms = by_base.get(p['base_url'], [])
+                up = any(m.get('status') == 'up' for m in ms)
+                # 端口实际提供的模型：以探测到的真实 id（detected_model）为唯一模型身份
+                # display = 真实模型 id（前端显示名）；call = 真实模型 id（前端调用名，直连 vLLM 需匹配其实际模型）
+                # 网关目录 name（如 DS4F）与上游实际模型可能不一致（上游换了模型），故不用目录 name 作调用名
+                items = []
+                for m in ms:
+                    real = m.get('detected_model') or m.get('upstream_model') or m.get('name')
+                    if real and not any(x['display'] == real for x in items):
+                        items.append({'call': real, 'display': real})
+                entries.append({
+                    'port': p['port'],
+                    'label': p['label'],
+                    'base_url': p['base_url'],
+                    'status': 'up' if up else 'down',
+                    'models': items if up else [],
+                    'probed_at': next((m.get('probed_at') for m in ms if m.get('probed_at')), None),
+                })
+            self._send_json(200, {'local_ports': entries},
+                            {'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+                             'Pragma': 'no-cache'})
+        except Exception as e:
+            # 网关不可达 → 两个端口均视为不通，前端显示 no model
+            entries = [{'port': p['port'], 'label': p['label'], 'base_url': p['base_url'],
+                        'status': 'down', 'models': [], 'probed_at': None} for p in LOCAL_PORTS]
+            self._send_json(200, {'local_ports': entries},
+                            {'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+                             'Pragma': 'no-cache'})
 
     def _proxy_llm(self, method, upstream_path=None, upstream=None, body=None):
         parsed = urlparse(self.path)
@@ -541,6 +592,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         elif p == '/api/stats/visit': self._send_json(200, _stats_visit(self.headers, self.client_address))
         elif p == '/api/prices': self._send_prices()
         elif p == '/api/models': self._send_models()
+        elif p == '/api/local-models': self._send_local_models()
         elif p == '/api/stats': self._send_json(200, _stats_get(self.headers, self.client_address))
         else: super().do_GET()
 

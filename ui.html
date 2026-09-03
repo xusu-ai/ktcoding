@@ -245,6 +245,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC',sans
 .model-dropdown-item{padding:7px 12px;font-size:12px;font-weight:500;color:var(--text2);cursor:pointer;transition:all .1s;white-space:nowrap;border-left:3px solid transparent}
 .model-dropdown-item:hover{background:#f5ede6;color:var(--text)}
 .model-dropdown-item.active{color:var(--text);font-weight:600;background:linear-gradient(135deg,rgba(0,179,179,.06),rgba(41,98,255,.06));border-left-color:var(--g-mid)}
+.model-dropdown-item.disabled{color:#bbb;cursor:not-allowed;opacity:.7;font-style:italic}
+.model-dropdown-item.disabled:hover{background:transparent;color:#bbb}
 
 /* Toast */
 .toast{position:fixed;bottom:84px;right:24px;background:#1e1e2e;border:none;border-radius:var(--radius);padding:10px 18px;font-size:13px;color:#e0e0e0;transform:translateY(20px);opacity:0;transition:all .3s;z-index:500;pointer-events:none}
@@ -461,11 +463,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC',sans
 /* 访问统计埋点:记录独立 IP 与点击数(失败静默,不影响页面) */
 try{fetch('/api/stats/visit')}catch(e){}
 const SK='showcode_projects',CK='showcode_chat',LK='showcode_lang',MK='showcode_model';
-let MODELS=[]; // 动态从模型目录(/api/models)加载：{id,name,model}
+let MODELS=[]; // AI 助手下拉模型：动态从 /api/local-models 加载 8105/8104 本地端口的实际模型 {id,name,model,portLabel?}
+// 每个可达端口一项：id/model=调用名（llmapi 目录 name），name=显示名（端口探测到的真实模型 id），portLabel=端口标签（no model 项用）
 const MODELS_FALLBACK=[
   {id:'Qwen3.8-27B',name:'Qwen3.8-27B',model:'Qwen3.8-27B'},
-  {id:'deepseek-v4-flash',name:'deepseek-v4-flash',model:'deepseek-v4-flash'}
-]; // 目录不可达时的兜底
+  {id:'DS4F',name:'DS4F',model:'DS4F'}
+]; // 接口不可达时的兜底
 let curModel=null;
 let lang='zh',projects=[],chat=[],mid=null,tab='latest',search='',lastCode='',gen=false,pt,activeEditor='html',deviceMode='desktop',fitActive=true,currentPage='editor';
 const PAGE_SIZE=12;let visibleCount=0,renderingMore=false,scrollObserver=null;
@@ -493,13 +496,22 @@ function init(){
   pf=document.getElementById('preview-frame');ci=document.getElementById('chat-input');
   if(!edh||!pf||!ci){showAlert('Page error: missing elements');return}
   try{lang=localStorage.getItem(LK)||'zh'}catch(e){lang='zh'}
-  try{var sm=localStorage.getItem(MK);if(sm&&MODELS.length){var fm=MODELS.find(function(m){return m.id===sm});if(fm)curModel=fm}}catch(e){}
-  // 模型下拉实时同步：引用 llmapi 模型目录(/api/models)，加载完成后填充（含本地缓存模型恢复）
-  fetch('/api/models',{cache:'no-store'}).then(function(r){return r.json()}).then(function(d){
-    MODELS=(d.models||[]).filter(function(m){return m.name}).map(function(m){return {id:m.name,name:m.name,model:m.upstream_model||m.name}});
-    if(!MODELS.length)MODELS=MODELS_FALLBACK.slice();
-    try{var sm=localStorage.getItem(MK);if(sm){var fm=MODELS.find(function(m){return m.id===sm});if(fm)curModel=fm}}catch(e){}
-    if(!curModel)curModel=MODELS[0];
+  try{var sm=localStorage.getItem(MK);if(sm&&MODELS.length){var fm=MODELS.find(function(m){return m.id===sm});if(fm)curModel=fm;else curModel=null}}catch(e){}
+  // 模型下拉：引用本地算力端口 8105/8104（/api/local-models），显示端口实际提供的模型名；端口不通显示 no model
+  fetch('/api/local-models',{cache:'no-store'}).then(function(r){return r.json()}).then(function(d){
+    var ports=d.local_ports||[];
+    localPorts=ports;
+    // 每个端口一项：可达→取探测到的第一个模型（id/model=调用名=llmapi 目录 name，name=显示名=端口真实模型 id）；不通→no model 项（置灰不可选）
+    var list=[];
+    ports.forEach(function(p){
+      var mm=p.models&&p.models[0];
+      if(mm&&mm.call){list.push({id:mm.call,name:mm.display||mm.call,model:mm.call})}
+      else{list.push({id:'port-'+p.port,name:'no model',model:null,portLabel:p.label})}
+    });
+    // 全部不通才用兜底（兜底项可正常调用云端/网关名）；否则以端口项为准
+    if(list.every(function(m){return m.portLabel}))MODELS=MODELS_FALLBACK.slice();else MODELS=list;
+    try{var sm=localStorage.getItem(MK);if(sm){var fm=MODELS.find(function(m){return m.id===sm});if(fm)curModel=fm;else curModel=null}}catch(e){}
+    if(!curModel)curModel=MODELS.find(function(m){return !m.portLabel})||MODELS[0];
     populateModelDropdown();
   }).catch(function(){MODELS=MODELS_FALLBACK.slice();curModel=MODELS[0];populateModelDropdown()});
   // populate model dropdown
@@ -846,9 +858,10 @@ function restorePrev(){
   b.textContent='\u25A1';b.title='最大化';
 }
 
+let localPorts=[]; // 保存端口状态供下拉渲染 no model 项
 function switchModel(id){
   var fm=MODELS.find(function(m){return m.id===id});
-  if(fm){curModel=fm;localStorage.setItem(MK,id)}
+  if(fm){curModel=fm;if(!fm.portLabel)localStorage.setItem(MK,id);else localStorage.removeItem(MK)} // no model 项不落盘，下次刷新重新选可用项
   document.getElementById('model-select-text').textContent=curModel.name;
   document.querySelectorAll('.model-dropdown-item').forEach(function(el){el.classList.toggle('active',el.dataset.id===id)});
   closeModelDropdown();
@@ -858,7 +871,11 @@ function populateModelDropdown(){
   var menu=document.getElementById('model-select-menu');
   if(!menu)return;
   if(!MODELS.length||!curModel)return; // 模型目录尚未加载完成
-  menu.innerHTML=MODELS.map(function(m){return '<div class="model-dropdown-item'+(m.id===curModel.id?' active':'')+'" data-id="'+m.id+'">'+m.name+'</div>'}).join('');
+  menu.innerHTML=MODELS.map(function(m){
+    if(m.portLabel) // 端口不通项：置灰不可点，显示 no model
+      return '<div class="model-dropdown-item disabled" data-id="'+m.id+'" title="端口 '+m.portLabel+' 未通">'+m.name+'</div>';
+    return '<div class="model-dropdown-item'+(m.id===curModel.id?' active':'')+'" data-id="'+m.id+'">'+m.name+'</div>';
+  }).join('');
   document.getElementById('model-select-text').textContent=curModel.name;
 }
 
@@ -880,7 +897,7 @@ document.addEventListener('click',function(e){
   var dd=e.target.closest('.model-dropdown');
   if(!dd){closeModelDropdown();return}
   var item=e.target.closest('.model-dropdown-item');
-  if(item)switchModel(item.dataset.id);
+  if(item){if(item.classList.contains('disabled'))return;switchModel(item.dataset.id)}
 });
 
 function toggleMsg(){
