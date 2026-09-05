@@ -1,4 +1,4 @@
-# NowCoding - 快兔算力代码创作与展示平台
+# KtCoding - 快兔算力代码创作与展示平台
 
 一个轻量级的在线代码创作与展示平台：内置 AI 对话助手，支持代码编辑、语法高亮、实时预览、多设备模拟和一键分享。
 
@@ -34,14 +34,14 @@ sudo ./deploy.sh
 ## 📁 项目结构
 
 ```
-nowcoding/
+ktcoding/
 ├── index.html               # 首页 - 快兔算力导航页
 ├── ui.html            # 主应用 - 代码编辑器与展示界面
 ├── quota.html               # 我的算力额度（占位页）
 ├── guide.html               # 算力接入指南（占位页）
 ├── server.py                # Python 后端（标准库，处理 /api/save）
 ├── projects/                # 保存的作品落盘目录（自动创建）
-├── nginx.nowcoding.conf     # nginx 站点配置（新服务器一键软链）
+├── nginx.ktcoding.conf     # nginx 站点配置（新服务器一键软链）
 ├── deploy.sh                # 全功能部署/运维脚本（见下表）
 ├── README.md                # 项目说明（中文）
 ├── README.en.md             # 项目说明（英文）
@@ -57,11 +57,11 @@ nowcoding/
 # 1) 目标服务器：装标准 nginx 和 Python
 sudo apt update && sudo apt install -y nginx python3
 
-# 2) 把整个 nowcoding/ 目录拷到目标服务器（路径随意，例如 /opt/nowcoding）
-sudo mkdir -p /opt && sudo cp -r nowcoding /opt/
+# 2) 把整个 ktcoding/ 目录拷到目标服务器（路径随意，例如 /opt/ktcoding）
+sudo mkdir -p /opt && sudo cp -r ktcoding /opt/
 
 # 3) 进目录跑一键部署脚本
-cd /opt/nowcoding && sudo ./deploy.sh
+cd /opt/ktcoding && sudo ./deploy.sh
 ```
 
 `deploy.sh` 子命令（systemd 单元、启停脚本都合并进来）：
@@ -74,12 +74,12 @@ cd /opt/nowcoding && sudo ./deploy.sh
 
 ### 调端口/目录
 
-只需改 `nginx.nowcoding.conf` 两处：
+只需改 `nginx.ktcoding.conf` 两处：
 
-- `root /nowcoding;` → 改成实际目录
+- `root /ktcoding;` → 改成实际目录
 - `proxy_pass http://127.0.0.1:13000/api/;` → 后端端口（生产 13000，与 deploy.sh 的 PORT 保持一致）
 
-后端代码默认端口 3000（环境变量 `SHOWCODE_PORT`/`SHOWCODE_BIND` 可调），生产 systemd 配置为 13000；改端口时同步改 `nginx.nowcoding.conf` 里 `proxy_pass` 的端口。
+后端代码默认端口 3000（环境变量 `SHOWCODE_PORT`/`SHOWCODE_BIND` 可调），生产 systemd 配置为 13000；改端口时同步改 `nginx.ktcoding.conf` 里 `proxy_pass` 的端口。
 
 ## 🔧 技术栈
 

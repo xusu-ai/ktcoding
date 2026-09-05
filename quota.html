@@ -26,7 +26,7 @@ a{color:inherit;text-decoration:none}
 button{font-family:inherit;cursor:pointer}
 
 /* Nav */
-.nav{height:50px;flex-shrink:0;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;position:sticky;top:0;z-index:100}
+.nav{height:50px;flex-shrink:0;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 0 0 20px;position:sticky;top:0;z-index:100}
 .nav-inner{max-width:1120px;width:100%;margin:0 auto;display:flex;align-items:center;gap:14px;overflow:hidden}
 .nav-logo{display:flex;align-items:center;gap:0;cursor:pointer;white-space:nowrap;flex-shrink:0}
 .nav-logo .name{font-size:15px;font-weight:800;letter-spacing:-.3px;color:var(--accent)}
@@ -96,7 +96,7 @@ button{font-family:inherit;cursor:pointer}
 .warnitem{font-size:12px;color:var(--amber);background:var(--amber-bg);border:1px solid #f3e2bd;border-radius:var(--radius);padding:8px 12px}
 
 /* Footer */
-.foot{flex-shrink:0;border-top:1px solid var(--border);background:var(--surface);padding:14px 20px;text-align:center;font-family:var(--mono);font-size:10.5px;letter-spacing:1.5px;color:var(--text3);text-transform:uppercase}
+.foot{flex-shrink:0;border-top:1px solid var(--border);background:var(--surface);padding:14px 20px;text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:1.5px;color:var(--text3);text-transform:uppercase}
 
 @media(max-width:768px){.nav-links{display:none}}
 </style>
@@ -106,7 +106,7 @@ button{font-family:inherit;cursor:pointer}
 <!-- Nav -->
 <nav class="nav">
   <div class="nav-inner">
-    <a class="nav-logo" href="index.html"><span class="name-gray">Now</span><span class="name">Coding.cn</span></a>
+    <a class="nav-logo" href="index.html"><span class="name-gray">Kt</span><span class="name">Coding</span><span class="name-gray">.cn</span></a>
     <a class="nav-quota active" href="quota.html" data-i18n="navQuota">我的算力额度</a>
     <div class="nav-links">
       <a href="guide.html" data-i18n="navGuide">算力接入指南</a>
@@ -145,7 +145,7 @@ button{font-family:inherit;cursor:pointer}
 <script>
 /* 访问统计埋点:记录独立 IP 与点击数(失败静默,不影响页面) */
 try{fetch('/api/stats/visit')}catch(e){}
-const API = 'https://api.nowcoding.cn/v1/usage';
+const API = '/v1/usage';
 const LK='kuaitu_lang';
 let lang='zh';
 const i18n={

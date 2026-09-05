@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""NowCoding HTTP server - 默认端口 3000，生产 SHOWCODE_PORT=13000"""
+"""KtCoding HTTP server - 默认端口 3000，生产 SHOWCODE_PORT=13000"""
 import http.server, os, sys, json, re, random, threading, time, socket
 import gzip, io, shutil
 from concurrent.futures import ThreadPoolExecutor
@@ -20,7 +20,7 @@ MODEL_ROUTES = {
 def _upstream_for(model):
     return MODEL_ROUTES.get(model, UPSTREAM_LLM)
 
-def _llm_call(prompt, temp=0.95, model='deepseek-v4-flash', max_tokens=8192):
+def _llm_call(prompt, temp=0.95, model='dsv4-180b-w4a16', max_tokens=3500):
     upstream = _upstream_for(model)
     body = json.dumps({'model': model, 'messages': [{'role': 'user', 'content': prompt}],
         'temperature': temp, 'max_tokens': max_tokens, 'stream': False}).encode('utf-8')
@@ -42,7 +42,7 @@ def _gen_suggestions(lang):
         'Return ONLY a JSON array of 4 strings: ["a","b","c","d"]. No markdown.'
     ).format(random.randint(1, 99999), 'Chinese' if is_zh else 'English')
     try:
-        text = _llm_call(prompt, model='Qwen3.8-27B').strip()
+        text = _llm_call(prompt, model='dsv4-180b-w4a16').strip()
         if text.startswith('```'): text = text.split('\n', 1)[1] if '\n' in text else text.replace('```', '').strip()
         if text.endswith('```'): text = text[:-3].strip()
         s = json.loads(text)
@@ -133,10 +133,10 @@ KNOWN_DOMAINS = {
     'htmlcode.cn', 'htmllab.cn', 'htmllab.net',
     'showcode.chat', 'showcode.ink', 'showcode.link', 'showcode.live', 'showcode.show',
     'showcode.site', 'showcode.space', 'showcode.tv', 'showcode.work', 'showcode.world',
-    'showcode.zone', 'showcoding.cn', 'nowcoding.cn', 'showhtml.cn', 'showmycode.cn', 'showyourcode.cn',
+    'showcode.zone', 'showcoding.cn', 'ktcoding.cn', 'showhtml.cn', 'showmycode.cn', 'showyourcode.cn',
     'upcoding.cn', 'kkcoding.cn', 'gpucode.cn', 'ttcoding.cn', 'sscoding.cn',
     'qqcoding.top', 'qqcoding.cn', 'qqcoding.com', 'codegpu.shop', 'codegpu.online',
-    'codegpu.fun', 'codegpu.cn', 'qqcmd.fun', 'api.nowcoding.cn',
+    'codegpu.fun', 'codegpu.cn', 'qqcmd.fun', 'api.ktcoding.cn',
     # 2026-08-09 证书拆分新增（110 域名 → 55 裸域名，www 自动归并）
     'appleclaw.live', 'appleclaw.online', 'appleclaw.top', 'appleclaw.video', 'appleclaw.vip',
     'cmdbot.cn', 'cmdcode.cn', 'dnmclaw.cn', 'dnmclaw.com',
@@ -443,7 +443,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         """模型价格实时同步：每次请求实时从 llmapi (/api/models) 拉取最新单次价格，后端改价前端即同步显示"""
         try:
             req = urllib.request.Request('http://127.0.0.1:6000/api/models',
-                                         headers={'User-Agent': 'nowcoding-price-sync'})
+                                         headers={'User-Agent': 'ktcoding-price-sync'})
             with urllib.request.urlopen(req, timeout=5) as resp:
                 data = json.loads(resp.read().decode('utf-8', 'replace'))
             prices = {}
@@ -457,11 +457,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._send_json(502, {'error': 'prices unavailable: ' + str(e)})
 
     def _send_models(self):
-        """模型目录同步：代理 llmapi /api/models，供 nowcoding 各页面直接引用模型目录的模型名。
+        """模型目录同步：代理 llmapi /api/models，供 ktcoding 各页面直接引用模型目录的模型名。
         只返回可用（status=up 或云端未探测）的真实模型：排除 mock、排除未通端口的占位模型。"""
         try:
             req = urllib.request.Request('http://127.0.0.1:6000/api/models',
-                                         headers={'User-Agent': 'nowcoding-model-sync'})
+                                         headers={'User-Agent': 'ktcoding-model-sync'})
             with urllib.request.urlopen(req, timeout=5) as resp:
                 data = json.loads(resp.read().decode('utf-8', 'replace'))
             models = []
@@ -495,7 +495,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         ]
         try:
             req = urllib.request.Request('http://127.0.0.1:6000/api/models',
-                                         headers={'User-Agent': 'nowcoding-local-models'})
+                                         headers={'User-Agent': 'ktcoding-local-models'})
             with urllib.request.urlopen(req, timeout=5) as resp:
                 data = json.loads(resp.read().decode('utf-8', 'replace'))
             # 按 base_url 建索引：同一本地端口可能对应多个目录条目（别名/不同 name）
@@ -833,5 +833,5 @@ if __name__ == '__main__':
     _cleanup_orphan_folders()  # 启动清理:删除与 projects.json 不同步的历史遗留目录
     BIND = os.environ.get('SHOWCODE_BIND', '127.0.0.1')
     httpd = http.server.ThreadingHTTPServer((BIND, PORT), Handler)
-    print("NowCoding server running on http://{}:{}".format(BIND, PORT), flush=True)
+    print("KtCoding server running on http://{}:{}".format(BIND, PORT), flush=True)
     httpd.serve_forever()

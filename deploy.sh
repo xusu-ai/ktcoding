@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# NowCoding 一键部署/运维脚本
+# KtCoding 一键部署/运维脚本
 #   sudo ./deploy.sh          # 完整部署（nginx + 后端，首次迁移用）
 #   sudo ./deploy.sh start    # 仅启动后端 server.py:13000
 #   sudo ./deploy.sh stop     # 停止后端
@@ -10,10 +10,10 @@ set -e
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 PY="python3 $DIR/server.py"
-PORT=13000   # 生产端口，与 nginx.nowcoding.conf 的 proxy_pass 保持一致
-PID_FILE="/var/run/nowcoding.pid"
-LOG_FILE="/var/log/nowcoding.log"
-NGINX_EN="/etc/nginx/sites-enabled/nowcoding"
+PORT=13000   # 生产端口，与 nginx.ktcoding.conf 的 proxy_pass 保持一致
+PID_FILE="/var/run/ktcoding.pid"
+LOG_FILE="/var/log/ktcoding.log"
+NGINX_EN="/etc/nginx/sites-enabled/ktcoding"
 
 start_backend() {
   if pgrep -f "$PY" >/dev/null; then echo "后端已在运行"; return; fi
@@ -36,9 +36,9 @@ case "${1:-deploy}" in
   restart) stop_backend; sleep 1; start_backend ;;
   status)  pgrep -fa "$PY" | grep -v grep || echo "未运行" ;;
   service)
-    cat > /tmp/nowcoding.service << EOF
+    cat > /tmp/ktcoding.service << EOF
 [Unit]
-Description=NowCoding Backend (server.py:$PORT)
+Description=KtCoding Backend (server.py:$PORT)
 After=network.target
 [Service]
 Type=simple
@@ -50,16 +50,16 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 EOF
-    cp /tmp/nowcoding.service /etc/systemd/system/nowcoding.service
+    cp /tmp/ktcoding.service /etc/systemd/system/ktcoding.service
     systemctl daemon-reload
-    systemctl enable --now nowcoding
+    systemctl enable --now ktcoding
     echo "已安装并启动 systemd 服务"
     ;;
   deploy)
     [ "$EUID" -ne 0 ] && { echo "请用 sudo 运行：sudo $0"; exit 1; }
     echo "[1/2] 配置 nginx..."
     [ -e "$NGINX_EN" ] && [ ! -L "$NGINX_EN" ] && cp "$NGINX_EN" "${NGINX_EN}.bak.$(date +%s)"
-    ln -sf "$DIR/nginx.nowcoding.conf" "$NGINX_EN"
+    ln -sf "$DIR/nginx.ktcoding.conf" "$NGINX_EN"
     nginx -t
     systemctl reload nginx || service nginx reload
     echo "[2/2] 启动后端..."

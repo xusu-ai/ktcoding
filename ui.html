@@ -16,7 +16,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC',sans
 ::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px}
 
 /* Nav */
-.nav{height:50px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;position:sticky;top:0;z-index:100}
+.nav{height:50px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 0 0 20px;position:sticky;top:0;z-index:100}
 .nav-inner{max-width:1120px;width:100%;margin:0 auto;display:flex;align-items:center;gap:14px;overflow:hidden}
 .nav-logo{display:flex;align-items:center;gap:0;cursor:pointer;white-space:nowrap;flex-shrink:0;font-size:15px;font-weight:800;letter-spacing:-.3px}
 .nav-logo .name{color:var(--g-mid)}
@@ -281,7 +281,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC',sans
 <!-- Nav -->
 <nav class="nav">
   <div class="nav-inner">
-    <a class="nav-logo" href="index.html"><span class="name-gray">Now</span><span class="name">Coding.cn</span></a>
+    <a class="nav-logo" href="index.html"><span class="name-gray">Kt</span><span class="name">Coding</span><span class="name-gray">.cn</span></a>
     <div class="nav-links">
       <a onclick="showPage('gallery')" id="nav-gallery" data-i18n="gallery">Gallery</a>
       <a class="active" onclick="showPage('editor')" id="nav-editor" data-i18n="playground">Playground</a>
@@ -466,9 +466,8 @@ const SK='showcode_projects',CK='showcode_chat',LK='showcode_lang',MK='showcode_
 let MODELS=[]; // AI 助手下拉模型：动态从 /api/local-models 加载 8105/8104 本地端口的实际模型 {id,name,model,portLabel?}
 // 每个可达端口一项：id/model=调用名（llmapi 目录 name），name=显示名（端口探测到的真实模型 id），portLabel=端口标签（no model 项用）
 const MODELS_FALLBACK=[
-  {id:'Qwen3.8-27B',name:'Qwen3.8-27B',model:'Qwen3.8-27B'},
-  {id:'DS4F',name:'DS4F',model:'DS4F'}
-]; // 接口不可达时的兜底
+  {id:'dsv4-180b-w4a16',name:'DSV4-180B (DGX-1)',model:'dsv4-180b-w4a16'}
+]; // 接口不可达时的兜底（8104 frp 隧道 → DGX-1 vLLM 实际模型名）
 let curModel=null;
 let lang='zh',projects=[],chat=[],mid=null,tab='latest',search='',lastCode='',gen=false,pt,activeEditor='html',deviceMode='desktop',fitActive=true,currentPage='editor';
 const PAGE_SIZE=12;let visibleCount=0,renderingMore=false,scrollObserver=null;
@@ -523,7 +522,7 @@ function init(){
   window.addEventListener('resize',function(){if(fitActive)applyFit();if(document.getElementById('modal-preview-wrap').classList.contains('fit'))applyModalFit()});
   // continue generation when tab hidden
   document.addEventListener('visibilitychange',function(){
-    if(document.hidden && gen) console.log('NowCoding: tab hidden, generation continues...');
+    if(document.hidden && gen) console.log('KtCoding: tab hidden, generation continues...');
   });
   window.addEventListener('beforeunload',function(e){
     if(gen){e.preventDefault();e.returnValue=t('beforeunload')}

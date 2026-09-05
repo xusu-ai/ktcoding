@@ -1,4 +1,4 @@
-# NowCoding — Online Code Showcase & Playground
+# KtCoding — Online Code Showcase & Playground
 
 A lightweight online code editor, preview, and sharing platform with AI-powered coding assistance.
 
@@ -33,14 +33,14 @@ This chains nginx configuration, reloads it, and starts the backend in one step.
 ## 🗂️ Project Structure
 
 ```
-nowcoding/
+ktcoding/
 ├── index.html               # Homepage — Kuaitu Compute nav page
 ├── ui.html            # Main application — code editor & gallery UI
 ├── quota.html               # Compute quota (placeholder page)
 ├── guide.html               # Compute access guide (placeholder page)
 ├── server.py                # Python backend (stdlib only, handles /api/save)
 ├── projects/                # Saved projects land here (auto-created)
-├── nginx.nowcoding.conf     # nginx site config (drop-in for new servers)
+├── nginx.ktcoding.conf     # nginx site config (drop-in for new servers)
 ├── deploy.sh                # all-in-one deploy/ops script
 ├── README.md                # Project documentation (Chinese on master, English on github branch)
 ├── README.en.md             # English version (source for the github branch)
@@ -55,11 +55,11 @@ The business logic is decoupled from nginx: nginx only serves static files and r
 # 1) On the target server: install nginx and Python
 sudo apt update && sudo apt install -y nginx python3
 
-# 2) Copy the entire nowcoding/ directory to the target server (any path, e.g. /opt/nowcoding)
-sudo mkdir -p /opt && sudo cp -r nowcoding /opt/
+# 2) Copy the entire ktcoding/ directory to the target server (any path, e.g. /opt/ktcoding)
+sudo mkdir -p /opt && sudo cp -r ktcoding /opt/
 
 # 3) Run the deployment script
-cd /opt/nowcoding && sudo ./deploy.sh
+cd /opt/ktcoding && sudo ./deploy.sh
 ```
 
 `deploy.sh` sub-commands:
@@ -72,12 +72,12 @@ cd /opt/nowcoding && sudo ./deploy.sh
 
 ### Port & Directory Configuration
 
-Only two changes needed in `nginx.nowcoding.conf`:
+Only two changes needed in `nginx.ktcoding.conf`:
 
-- `root /nowcoding;` — change to your actual directory path
+- `root /ktcoding;` — change to your actual directory path
 - `proxy_pass http://127.0.0.1:13000/api/;` — backend port (production uses 13000, kept in sync with PORT in deploy.sh)
 
-The backend port defaults to 3000 and is configurable via the `SHOWCODE_PORT`/`SHOWCODE_BIND` environment variables (production systemd uses 13000); keep the `proxy_pass` port in `nginx.nowcoding.conf` in sync.
+The backend port defaults to 3000 and is configurable via the `SHOWCODE_PORT`/`SHOWCODE_BIND` environment variables (production systemd uses 13000); keep the `proxy_pass` port in `nginx.ktcoding.conf` in sync.
 
 ## 🧰 Tech Stack
 
