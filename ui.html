@@ -16,8 +16,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC',sans
 ::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px}
 
 /* Nav */
-.nav{height:50px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 0 0 20px;position:sticky;top:0;z-index:100}
-.nav-inner{max-width:1120px;width:100%;margin:0 auto;display:flex;align-items:center;gap:14px;overflow:hidden}
+.nav{height:50px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;position:sticky;top:0;z-index:100}
+.nav-inner{max-width:1280px;width:100%;margin:0 auto;display:flex;align-items:center;gap:14px;overflow:hidden}
 .nav-logo{display:flex;align-items:center;gap:0;cursor:pointer;white-space:nowrap;flex-shrink:0;font-size:15px;font-weight:800;letter-spacing:-.3px}
 .nav-logo .name{color:var(--g-mid)}
 .nav-logo .name-gray{color:var(--text)}
@@ -265,6 +265,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC',sans
 @media(max-width:768px){
   .chat-dialog{width:90vw;height:80vh}
   .chat-overlay{padding:0}
+  /* 手机端：模型选择下拉变窄 + 允许省略号，避免与右侧"重置"按钮/窗口按钮重叠 */
+  .model-dropdown-btn{width:auto;min-width:0;max-width:130px;padding:4px 8px}
+  .model-dropdown-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .chat-head{gap:8px}
+  .chat-head>div:first-child{gap:6px}
   .modal-body{grid-template-columns:1fr}
   .playground{height:auto}
   .nav-links{display:none}
@@ -466,8 +471,8 @@ const SK='showcode_projects',CK='showcode_chat',LK='showcode_lang',MK='showcode_
 let MODELS=[]; // AI 助手下拉模型：动态从 /api/local-models 加载 8105/8104 本地端口的实际模型 {id,name,model,portLabel?}
 // 每个可达端口一项：id/model=调用名（llmapi 目录 name），name=显示名（端口探测到的真实模型 id），portLabel=端口标签（no model 项用）
 const MODELS_FALLBACK=[
-  {id:'dsv4-180b-w4a16',name:'DSV4-180B (DGX-1)',model:'dsv4-180b-w4a16'}
-]; // 接口不可达时的兜底（8104 frp 隧道 → DGX-1 vLLM 实际模型名）
+  {id:'port-8104',name:'qwen3.8-27b',model:'Qwen3.8-27B',port:8104}
+]; // 接口不可达时的兜底（8104 本地 vLLM，调用名=真实模型 id，port 用于后端按端口路由）
 let curModel=null;
 let lang='zh',projects=[],chat=[],mid=null,tab='latest',search='',lastCode='',gen=false,pt,activeEditor='html',deviceMode='desktop',fitActive=true,currentPage='editor';
 const PAGE_SIZE=12;let visibleCount=0,renderingMore=false,scrollObserver=null;
@@ -495,7 +500,7 @@ function init(){
   pf=document.getElementById('preview-frame');ci=document.getElementById('chat-input');
   if(!edh||!pf||!ci){showAlert('Page error: missing elements');return}
   try{lang=localStorage.getItem(LK)||'zh'}catch(e){lang='zh'}
-  try{var sm=localStorage.getItem(MK);if(sm&&MODELS.length){var fm=MODELS.find(function(m){return m.id===sm});if(fm)curModel=fm;else curModel=null}}catch(e){}
+  try{var sm0=localStorage.getItem(MK);if(sm0&&MODELS.length){var fm0=MODELS.find(function(m){return m.id===sm0&&m.model});if(fm0)curModel=fm0;else localStorage.removeItem(MK)}}catch(e){} // 存过但已不存在的旧模型名（上游换模型）→ 清除，走自动选择
   // 模型下拉：引用本地算力端口 8105/8104（/api/local-models），显示端口实际提供的模型名；端口不通显示 no model
   fetch('/api/local-models',{cache:'no-store'}).then(function(r){return r.json()}).then(function(d){
     var ports=d.local_ports||[];
@@ -504,12 +509,12 @@ function init(){
     var list=[];
     ports.forEach(function(p){
       var mm=p.models&&p.models[0];
-      if(mm&&mm.call){list.push({id:mm.call,name:mm.display||mm.call,model:mm.call})}
+      if(mm&&mm.call){list.push({id:'port-'+(mm.port||p.port),name:mm.display||mm.call,model:mm.call,port:mm.port||p.port})}
       else{list.push({id:'port-'+p.port,name:'no model',model:null,portLabel:p.label})}
     });
     // 全部不通才用兜底（兜底项可正常调用云端/网关名）；否则以端口项为准
     if(list.every(function(m){return m.portLabel}))MODELS=MODELS_FALLBACK.slice();else MODELS=list;
-    try{var sm=localStorage.getItem(MK);if(sm){var fm=MODELS.find(function(m){return m.id===sm});if(fm)curModel=fm;else curModel=null}}catch(e){}
+    try{var sm=localStorage.getItem(MK);if(sm){var fm=MODELS.find(function(m){return m.id===sm&&m.model});if(fm)curModel=fm;else{curModel=null;localStorage.removeItem(MK)}}}catch(e){}
     if(!curModel)curModel=MODELS.find(function(m){return !m.portLabel})||MODELS[0];
     populateModelDropdown();
   }).catch(function(){MODELS=MODELS_FALLBACK.slice();curModel=MODELS[0];populateModelDropdown()});
@@ -952,11 +957,27 @@ async function sendMsg(){
   try{
     const SYS='You are a professional full-stack development assistant. When a user describes a page or feature they want, you generate complete, ready-to-run HTML code. The code should be beautiful, modern, responsive, and wrapped in a ```html block. Respond in the same language the user used in their question.';
     const msgs=[{role:'system',content:SYS},...chat];
-    const res=await fetch('/api/chat',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:curModel.model,messages:msgs,temperature:0.7,max_tokens:16384,stream:true}),
-      signal:ac.signal
-    });
+    // 瞬时错误（502/503/504、网络层失败）自动重试一次：frp 长隧道上偶发的连接中断/请求截断，重试通常即恢复
+    var res,attempts=0;
+    while(true){
+      attempts++;
+      try{
+        res=await fetch('/api/chat',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({model:curModel.model,port:curModel.port,messages:msgs,temperature:0.7,max_tokens:16384,stream:true}),
+          signal:ac.signal
+        });
+        break;
+      }catch(e){
+        if(attempts>=2||e.name==='AbortError')throw e;
+        await new Promise(function(r){setTimeout(r,400)});
+      }
+      if(!res.ok&&(res.status===502||res.status===503||res.status===504)&&attempts<2){
+        await new Promise(function(r){setTimeout(r,400)});
+        continue;
+      }
+      break;
+    }
     ty.remove();if(!res.ok)throw new Error('Error: '+res.status);
     const reader=res.body.getReader(),dec=new TextDecoder();
     el=addMsg('assistant','',true);bub=el.querySelector('.chat-bub');bcont=bub.querySelector('.chat-bub-content');
@@ -1004,7 +1025,7 @@ async function sendMsg(){
       }
       return;
     }
-    var msg = /Failed to fetch|NetworkError|ECONN|fetch|upstream|502|503|504/i.test(err.message+' ') ? t('aiUnavailable') : t('error')+': '+err.message;
+    var msg = /Failed to fetch|NetworkError|ECONN|fetch|upstream|502|503|504|Error: 4/i.test(err.message+' ') ? t('aiUnavailable') : t('error')+': '+err.message;
     addMsg('assistant','&#10060; '+msg)
   }
   finally{

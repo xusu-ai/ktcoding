@@ -13,15 +13,19 @@ DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECTS_DIR = os.path.join(DIR, 'projects')
 PROJECTS_JSON = os.path.join(PROJECTS_DIR, 'projects.json')
 UPSTREAM_LLM = 'http://127.0.0.1:8104'
-MODEL_ROUTES = {
-    'Qwen3.8-27B': 'http://127.0.0.1:8105',
-}
+# 端口路由：/api/chat 按前端携带的 port 直连对应 vLLM 端口（同一模型名可能多端口部署，不能按模型名路由）
+def _upstream_for(model, port=None):
+    # port 只接受合法端口号（防注入/误传），否则回退默认上游
+    try:
+        p = int(port)
+        if 0 < p < 65536:
+            return 'http://127.0.0.1:{}'.format(p)
+    except (TypeError, ValueError):
+        pass
+    return UPSTREAM_LLM
 
-def _upstream_for(model):
-    return MODEL_ROUTES.get(model, UPSTREAM_LLM)
-
-def _llm_call(prompt, temp=0.95, model='dsv4-180b-w4a16', max_tokens=3500):
-    upstream = _upstream_for(model)
+def _llm_call(prompt, temp=0.95, model='Qwen3.8-27B', max_tokens=3500):
+    upstream = UPSTREAM_LLM
     body = json.dumps({'model': model, 'messages': [{'role': 'user', 'content': prompt}],
         'temperature': temp, 'max_tokens': max_tokens, 'stream': False}).encode('utf-8')
     req = urllib.request.Request(upstream + '/v1/chat/completions', data=body,
@@ -42,7 +46,7 @@ def _gen_suggestions(lang):
         'Return ONLY a JSON array of 4 strings: ["a","b","c","d"]. No markdown.'
     ).format(random.randint(1, 99999), 'Chinese' if is_zh else 'English')
     try:
-        text = _llm_call(prompt, model='dsv4-180b-w4a16').strip()
+        text = _llm_call(prompt).strip()
         if text.startswith('```'): text = text.split('\n', 1)[1] if '\n' in text else text.replace('```', '').strip()
         if text.endswith('```'): text = text[:-3].strip()
         s = json.loads(text)
@@ -490,8 +494,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         端口可达 → 显示端口实际提供的模型名（llmapi 实时探测的 detected_model）；
         端口不通 → models 为空，前端显示 "no model"。始终返回这两个端口的条目（不隐藏）。"""
         LOCAL_PORTS = [
-            {'port': 8105, 'base_url': 'http://127.0.0.1:8105/v1', 'label': '127.0.0.1:8105'},
             {'port': 8104, 'base_url': 'http://127.0.0.1:8104/v1', 'label': '127.0.0.1:8104'},
+            {'port': 8105, 'base_url': 'http://127.0.0.1:8105/v1', 'label': '127.0.0.1:8105'},
+            {'port': 8106, 'base_url': 'http://127.0.0.1:8106/v1', 'label': '127.0.0.1:8106'},
         ]
         try:
             req = urllib.request.Request('http://127.0.0.1:6000/api/models',
@@ -509,14 +514,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             for p in LOCAL_PORTS:
                 ms = by_base.get(p['base_url'], [])
                 up = any(m.get('status') == 'up' for m in ms)
-                # 端口实际提供的模型：以探测到的真实 id（detected_model）为唯一模型身份
-                # display = 真实模型 id（前端显示名）；call = 真实模型 id（前端调用名，直连 vLLM 需匹配其实际模型）
-                # 网关目录 name（如 DS4F）与上游实际模型可能不一致（上游换了模型），故不用目录 name 作调用名
+                # 端口实际提供的模型：
+                # display = 网关目录 alias（如 qwen3.8-27b / qwen3.8-27b-3），缺省回退真实模型 id（前端显示名）
+                # call    = 真实模型 id（detected_model/upstream_model），vLLM 实际模型名（前端调用名）
+                # port    = 端口号（前端调用时携带，后端按端口路由，不按模型名——同模型可能多端口部署）
                 items = []
                 for m in ms:
                     real = m.get('detected_model') or m.get('upstream_model') or m.get('name')
-                    if real and not any(x['display'] == real for x in items):
-                        items.append({'call': real, 'display': real})
+                    disp = m.get('alias') or real
+                    if real and not any(x['display'] == disp for x in items):
+                        items.append({'call': real, 'display': disp, 'port': p['port']})
                 entries.append({
                     'port': p['port'],
                     'label': p['label'],
@@ -618,15 +625,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         p = urlparse(self.path).path
         if p.startswith('/v1/'): self._proxy_llm('POST')
         elif p == '/api/chat':
-            upstream = None
+            # 先读请求体再决定上游：若 body 不完整/非 JSON（frp 链路上偶发截断），
+            # 直接 400 让前端重试，避免把损坏的 body 发给上游导致 502
+            length = int(self.headers.get('Content-Length', 0))
+            raw = self.rfile.read(length) if length > 0 else b''
             try:
-                length = int(self.headers.get('Content-Length', 0))
-                raw = self.rfile.read(length) if length > 0 else b''
                 body_obj = json.loads(raw) if raw else {}
-                upstream = _upstream_for(body_obj.get('model', ''))
-                self._proxy_llm('POST', '/v1/chat/completions', upstream=upstream, body=raw)
-            except Exception:
-                self._send_json(400, {'ok': False, 'error': 'bad chat body'})
+                if not isinstance(body_obj, dict) or not body_obj.get('messages'):
+                    raise ValueError('missing messages')
+            except Exception as e:
+                self._send_json(400, {'ok': False, 'error': 'bad chat body: ' + str(e)[:120]})
+                return
+            upstream = _upstream_for(body_obj.get('model', ''), body_obj.get('port'))
+            self._proxy_llm('POST', '/v1/chat/completions', upstream=upstream, body=raw)
         elif p == '/api/save': self._save_project()
         else: self._send_json(404, {'ok': False, 'error': 'not found'})
 
