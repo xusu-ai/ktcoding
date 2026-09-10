@@ -108,8 +108,8 @@ if ($action === 'json') {
 }
 
 // === 写操作：add / remove 一律返回 JSON（前端 fetch 依赖，浏览器直开时用户也能看懂 JSON）===
-if ($action === 'add' && isset($_POST['ip'])) {
-    $ip = trim($_POST['ip']);
+if ($action === 'add' && (isset($_POST['ip']) || isset($_GET['ip']))) {
+    $ip = trim($_POST['ip'] ?? $_GET['ip']);
     // 验证
     $valid = filter_var($ip, FILTER_VALIDATE_IP) || preg_match('/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}$/', $ip);
     if (!$valid) {
@@ -127,6 +127,21 @@ if ($action === 'add' && isset($_POST['ip'])) {
     $data['ips'][] = $ip;
     writeWhitelist($dataFile, $data['ips']);
     releaseLock($lock);
+
+    // 传播添加到对端（与删除对称，秒级三端一致；防 X-Propagated-Add 环路）
+    $isPropagatedAdd = isset($_SERVER['HTTP_X_PROPAGATED_ADD']);
+    if (!$isPropagatedAdd) {
+        $script = '/usr/local/sbin/ipwhitelist/propagate-add.sh';
+        $ran = false;
+        if (file_exists($script) && function_exists('shell_exec')) {
+            $cmd = 'timeout 30 ' . escapeshellarg($script) . ' ' . escapeshellarg($ip) . ' 2>&1';
+            $output = @shell_exec($cmd);
+            if ($output !== null) {
+                $ran = true;
+                error_log("[ip-whitelist] propagate-add via shell: $output");
+            }
+        }
+    }
     jsonRespond(['message' => "已添加: $ip (当前 " . count($data['ips']) . " 个条目)", 'type' => 'success']);
 }
 
@@ -149,7 +164,7 @@ if ($action === 'remove' && isset($_GET['ip'])) {
     // 优先用本机 shell 脚本（root 权限、带 XHR 头），失败则回退 PHP 直连
     $isPropagated = isset($_SERVER['HTTP_X_PROPAGATED_DELETE']);
     if (!$isPropagated) {
-        $script = '/root/scripts/propagate-delete.sh';
+        $script = '/usr/local/sbin/ipwhitelist/propagate-delete.sh';
         $ran = false;
         if (file_exists($script) && function_exists('shell_exec')) {
             $cmd = 'timeout 30 ' . escapeshellarg($script) . ' ' . escapeshellarg($ip) . ' 2>&1';
