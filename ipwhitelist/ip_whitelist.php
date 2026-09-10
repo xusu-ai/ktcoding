@@ -99,6 +99,43 @@ function writeWhitelist($dataFile, $ips) {
     }
 }
 
+// 统一的对端 HTTP 传播（shell 不可用/失败时的回退；add/remove 通用）
+function propagatePeersHttp($ip, $action, $user, $pass) {
+    $peerHosts = ['qqcmd.cn', 'nowcoding.cn', 'ktcoding.cn'];
+    $selfHost = $_SERVER['HTTP_HOST'] ?? 'ktcoding.cn';
+    foreach ($peerHosts as $ph) {
+        if ($ph === $selfHost) continue;
+        $scheme = ($ph === 'qqcmd.cn') ? 'http' : 'https';
+        $propHeader = $action === 'add' ? 'X-Propagated-Add: 1' : 'X-Propagated-Delete: 1';
+        if ($action === 'add') {
+            $peerUrl = $scheme . '://' . $ph . '/ipwhitelist/ip_whitelist.php?action=add';
+            $ctx = stream_context_create(['http' => ['method' => 'POST', 'timeout' => 8, 'ignore_errors' => true,
+                'content' => 'ip=' . urlencode($ip),
+                'header' => "Authorization: Basic " . base64_encode($user . ':' . $pass) .
+                            "\r\nContent-Type: application/x-www-form-urlencoded\r\n" .
+                            $propHeader . "\r\nX-Requested-With: XMLHttpRequest\r\n"],
+                'ssl' => ['verify_peer' => false, 'verify_peer_name' => false]]);
+        } else {
+            $peerUrl = $scheme . '://' . $ph . '/ipwhitelist/ip_whitelist.php?action=remove&ip=' . urlencode($ip);
+            $ctx = stream_context_create(['http' => ['timeout' => 8, 'ignore_errors' => true,
+                'header' => "Authorization: Basic " . base64_encode($user . ':' . $pass) .
+                            "\r\n" . $propHeader . "\r\nX-Requested-With: XMLHttpRequest\r\n"],
+                'ssl' => ['verify_peer' => false, 'verify_peer_name' => false]]);
+        }
+        @file_get_contents($peerUrl, false, $ctx);
+    }
+}
+
+// 传播脚本目录（可配置）：
+//   阿贝云/快兔算力(有 shell): /usr/local/sbin/ipwhitelist (root 预装)
+//   新网虚拟主机(无 shell):    __DIR__ . '/propagate' (FTP 上传，PHP 用 escapeshellarg 调 bash)
+$propagateDir = getenv('IPWHITELIST_PROPAGATE_DIR');
+if (!$propagateDir) {
+    // 虚拟主机 open_basedir 限制下 is_dir 外部路径会报警告，优先探测 web 根内的 propagate 目录
+    $local = __DIR__ . '/propagate';
+    $propagateDir = is_dir($local) ? $local : (function_exists('getenv') && @is_dir('/usr/local/sbin/ipwhitelist') ? '/usr/local/sbin/ipwhitelist' : $local);
+}
+
 $action = isset($_GET['action']) ? $_GET['action'] : 'view';
 
 // === JSON API: 列表 ===
@@ -131,15 +168,17 @@ if ($action === 'add' && (isset($_POST['ip']) || isset($_GET['ip']))) {
     // 传播添加到对端（与删除对称，秒级三端一致；防 X-Propagated-Add 环路）
     $isPropagatedAdd = isset($_SERVER['HTTP_X_PROPAGATED_ADD']);
     if (!$isPropagatedAdd) {
-        $script = '/usr/local/sbin/ipwhitelist/propagate-add.sh';
-        $ran = false;
+        $script = $propagateDir . '/propagate-add.sh';
         if (file_exists($script) && function_exists('shell_exec')) {
             $cmd = 'timeout 30 ' . escapeshellarg($script) . ' ' . escapeshellarg($ip) . ' 2>&1';
             $output = @shell_exec($cmd);
             if ($output !== null) {
-                $ran = true;
                 error_log("[ip-whitelist] propagate-add via shell: $output");
+            } else {
+                propagatePeersHttp($ip, 'add', $user, $pass);
             }
+        } else {
+            propagatePeersHttp($ip, 'add', $user, $pass);
         }
     }
     jsonRespond(['message' => "已添加: $ip (当前 " . count($data['ips']) . " 个条目)", 'type' => 'success']);
@@ -164,30 +203,17 @@ if ($action === 'remove' && isset($_GET['ip'])) {
     // 优先用本机 shell 脚本（root 权限、带 XHR 头），失败则回退 PHP 直连
     $isPropagated = isset($_SERVER['HTTP_X_PROPAGATED_DELETE']);
     if (!$isPropagated) {
-        $script = '/usr/local/sbin/ipwhitelist/propagate-delete.sh';
-        $ran = false;
+        $script = $propagateDir . '/propagate-delete.sh';
         if (file_exists($script) && function_exists('shell_exec')) {
             $cmd = 'timeout 30 ' . escapeshellarg($script) . ' ' . escapeshellarg($ip) . ' 2>&1';
             $output = @shell_exec($cmd);
             if ($output !== null) {
-                $ran = true;
                 error_log("[ip-whitelist] propagate via shell: $output");
+            } else {
+                propagatePeersHttp($ip, 'remove', $user, $pass);
             }
-        }
-        // 回退：PHP 直连（shell 不可用时）
-        if (!$ran) {
-            $peerHosts = ['qqcmd.cn', 'nowcoding.cn', 'ktcoding.cn'];
-            $selfHost = $_SERVER['HTTP_HOST'] ?? 'ktcoding.cn';
-            foreach ($peerHosts as $ph) {
-                if ($ph === $selfHost) continue;
-                $scheme = ($ph === 'qqcmd.cn') ? 'http' : 'https';
-                $peerUrl = $scheme . '://' . $ph . '/ipwhitelist/ip_whitelist.php?action=remove&ip=' . urlencode($ip);
-                $ctx = stream_context_create(['http' => ['timeout' => 8, 'ignore_errors' => true,
-                    'header' => "Authorization: Basic " . base64_encode($user . ':' . $pass) .
-                                "\r\nX-Propagated-Delete: 1\r\nX-Requested-With: XMLHttpRequest\r\n"],
-                    'ssl' => ['verify_peer' => false, 'verify_peer_name' => false]]);
-                @file_get_contents($peerUrl, false, $ctx);
-            }
+        } else {
+            propagatePeersHttp($ip, 'remove', $user, $pass);
         }
     }
     jsonRespond(['message' => "已删除: $ip (当前 " . count($data['ips']) . " 个条目)", 'type' => 'success']);
