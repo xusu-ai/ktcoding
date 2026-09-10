@@ -1,5 +1,5 @@
-# IP whitelist - auto-managed
-# Format: one IP or CIDR per line
+# IP whitelist — auto-managed
+# Format: one IP or CIDR per line, # for comments
 
 101.82.0.0/16
 107.150.0.0/16
@@ -30,4 +30,5 @@
 183.192.223.142
 220.189.0.0/16
 220.189.153.228
-# last_update: 2026-09-10 01:15:02 UTC
+
+# last_update: 2026-09-10 01:21:35 UTC
