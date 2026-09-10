@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IP 白名单管理</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0d1117;color:#c9d1d9;min-height:100vh;padding:20px}
+.container{max-width:800px;margin:0 auto}
+h1{font-size:22px;margin-bottom:6px;color:#58a6ff}
+.subtitle{font-size:13px;color:#8b949e;margin-bottom:24px}
+.card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:20px;margin-bottom:16px}
+.card h2{font-size:16px;margin-bottom:12px;color:#c9d1d9}
+.message{padding:10px 14px;border-radius:6px;margin-bottom:16px;font-size:14px;display:none}
+.message.success{background:#0d4429;border:1px solid #238636;color:#3fb950;display:block}
+.message.error{background:#4d1117;border:1px solid #f85149;color:#f85149;display:block}
+.message.info{background:#0c2d6b;border:1px solid #58a6ff;color:#58a6ff;display:block}
+.add-form{display:flex;gap:8px}
+.add-form input[type="text"]{flex:1;padding:10px 14px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:14px;font-family:monospace}
+.add-form input[type="text"]:focus{outline:none;border-color:#58a6ff}
+.add-form button{padding:10px 20px;background:#238636;border:none;border-radius:6px;color:#fff;font-size:14px;cursor:pointer}
+.add-form button:hover{background:#2ea043}
+.add-form button:disabled{opacity:.5;cursor:not-allowed}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:12px;color:#8b949e;padding:8px 10px;border-bottom:1px solid #30363d;text-transform:uppercase}
+td{padding:8px 10px;border-bottom:1px solid #21262d;font-size:14px}
+tr:hover td{background:#1c2128}
+.ip-text{font-family:'SF Mono',Monaco,Consolas,monospace;color:#58a6ff}
+.del-btn{padding:3px 10px;background:transparent;border:1px solid #f85149;border-radius:4px;color:#f85149;font-size:12px;cursor:pointer;text-decoration:none;display:inline-block}
+.del-btn:hover{background:#f85149;color:#fff}
+.stats{display:flex;gap:24px;margin-bottom:16px}
+.stat-item{text-align:center}
+.stat-num{font-size:28px;font-weight:700;color:#58a6ff}
+.stat-label{font-size:12px;color:#8b949e;margin-top:2px}
+.count-badge{display:inline-block;background:#1f6feb;color:#fff;font-size:11px;padding:1px 8px;border-radius:10px;margin-left:8px}
+.loading{text-align:center;padding:40px;color:#8b949e}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>🔒 IP 白名单管理</h1>
+<p class="subtitle">防火墙白名单同步源 — <span id="lastUpdate">加载中...</span></p>
+
+<div id="msg" class="message"></div>
+
+<div class="stats">
+<div class="stat-item"><div class="stat-num" id="stTotal">-</div><div class="stat-label">总条目</div></div>
+<div class="stat-item"><div class="stat-num" id="stIps">-</div><div class="stat-label">单 IP</div></div>
+<div class="stat-item"><div class="stat-num" id="stNets">-</div><div class="stat-label">网段</div></div>
+</div>
+
+<div class="card">
+<h2>➕ 添加 IP / 网段</h2>
+<form class="add-form" id="addForm">
+<input type="text" id="ipInput" placeholder="192.168.1.1 或 192.168.1.0/24" required>
+<button type="submit" id="addBtn">添加</button>
+</form>
+</div>
+
+<div class="card">
+<h2>📋 当前白名单 <span class="count-badge" id="badge">-</span></h2>
+<div id="tableWrap"><div class="loading">加载中...</div></div>
+</div>
+
+<div class="card" style="font-size:12px;color:#8b949e">
+<p>⚙️ 阿贝云 + 新网107 每 5 分钟自动同步此页面。添加的 IP/网段会立即加入防火墙白名单。</p>
+<p style="margin-top:6px">📌 删除 IP 后自动同步到三站，并在下次防火墙同步时移除（约 5 分钟延迟）。</p>
+</div>
+</div>
+
+<script>
+const API = 'ip_whitelist.php';
+
+// 统一 fetch 封装：自动带 XHR 标记 + 统一 JSON 解析（非 JSON 响应时给出可读错误，不再抛 SyntaxError）
+async function apiFetch(url, options = {}) {
+    options.headers = Object.assign({
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': 'application/json'
+    }, options.headers || {});
+    const r = await fetch(url, options);
+    let d = null;
+    const text = await r.text();
+    try { d = JSON.parse(text); }
+    catch (_) {
+        throw new Error('服务返回非 JSON (HTTP ' + r.status + ')：' + text.slice(0, 80).replace(/\s+/g, ' '));
+    }
+    if (!r.ok && d && d.type === undefined) d.type = 'error';
+    return d;
+}
+
+function showMsg(text, type) {
+    const el = document.getElementById('msg');
+    el.textContent = text;
+    el.className = 'message ' + type;
+    setTimeout(() => { el.className = 'message'; }, 4000);
+}
+
+function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+}
+
+async function load() {
+    try {
+        const d = await apiFetch(API + '?action=json');
+        if (d.error) { showMsg(d.error, 'error'); return; }
+        render(d);
+    } catch(e) {
+        document.getElementById('tableWrap').innerHTML = '<div class="loading">加载失败: ' + esc(e.message) + '</div>';
+    }
+}
+
+function render(d) {
+    const ips = d.ips || [];
+    document.getElementById('stTotal').textContent = ips.length;
+    document.getElementById('stIps').textContent = ips.filter(x => !x.includes('/')).length;
+    document.getElementById('stNets').textContent = ips.filter(x => x.includes('/')).length;
+    document.getElementById('badge').textContent = ips.length + ' 条';
+    document.getElementById('lastUpdate').textContent = d.last_update || '未知';
+
+    if (!ips.length) {
+        document.getElementById('tableWrap').innerHTML = '<div class="loading">暂无数据</div>';
+        return;
+    }
+
+    let html = '<table><thead><tr><th>#</th><th>IP / 网段</th><th>类型</th><th>操作</th></tr></thead><tbody>';
+    ips.forEach((ip, i) => {
+        const isCidr = ip.includes('/');
+        html += '<tr><td>' + (i+1) + '</td><td class="ip-text">' + esc(ip) + '</td><td>' + (isCidr?'网段':'IP') + '</td>';
+        html += '<td><a class="del-btn" href="javascript:void(0)" onclick="removeItem(\'' + esc(ip) + '\')">删除</a></td></tr>';
+    });
+    html += '</tbody></table>';
+    document.getElementById('tableWrap').innerHTML = html;
+}
+
+async function addItem(ip) {
+    const btn = document.getElementById('addBtn');
+    btn.disabled = true;
+    try {
+        const d = await apiFetch(API + '?action=add', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: 'ip=' + encodeURIComponent(ip)
+        });
+        showMsg(d.message || '操作完成', d.type || 'success');
+        load();
+    } catch(e) { showMsg('添加失败: ' + e.message, 'error'); }
+    finally { btn.disabled = false; }
+}
+
+async function removeItem(ip) {
+    if (!confirm('确认删除 ' + ip + ' ?（将同步到三站）')) return;
+    try {
+        const d = await apiFetch(API + '?action=remove&ip=' + encodeURIComponent(ip));
+        showMsg(d.message || '操作完成', d.type || 'success');
+        load();
+    } catch(e) { showMsg('删除失败: ' + e.message, 'error'); }
+}
+
+document.getElementById('addForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const ip = document.getElementById('ipInput').value.trim();
+    if (ip) { addItem(ip); document.getElementById('ipInput').value = ''; }
+});
+
+load();
+</script>
+</body>
+</html>
