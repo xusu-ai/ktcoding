@@ -137,19 +137,33 @@ if ($action === 'remove' && isset($_GET['ip'])) {
     releaseLock($lock);
 
     // 传播删除到对端（防止 union 同步把已删 IP 拉回来）
+    // 优先用本机 shell 脚本（root 权限、带 XHR 头），失败则回退 PHP 直连
     $isPropagated = isset($_SERVER['HTTP_X_PROPAGATED_DELETE']);
     if (!$isPropagated) {
-        $peerHosts = ['qqcmd.cn', 'nowcoding.cn', 'ktcoding.cn'];
-        $selfHost = $_SERVER['HTTP_HOST'] ?? 'ktcoding.cn';
-        foreach ($peerHosts as $ph) {
-            if ($ph === $selfHost) continue;
-            $scheme = ($ph === 'qqcmd.cn') ? 'http' : 'https';
-            $peerUrl = $scheme . '://' . $ph . '/ipwhitelist/ip_whitelist.php?action=remove&ip=' . urlencode($ip);
-            $ctx = stream_context_create(['http' => ['timeout' => 8, 'ignore_errors' => true,
-                'header' => "Authorization: Basic " . base64_encode($user . ':' . $pass) .
-                            "\r\nX-Propagated-Delete: 1\r\nX-Requested-With: XMLHttpRequest\r\n"],
-                'ssl' => ['verify_peer' => false, 'verify_peer_name' => false]]);
-            @file_get_contents($peerUrl, false, $ctx);
+        $script = '/root/scripts/propagate-delete.sh';
+        $ran = false;
+        if (file_exists($script) && function_exists('shell_exec')) {
+            $cmd = 'timeout 30 ' . escapeshellarg($script) . ' ' . escapeshellarg($ip) . ' 2>&1';
+            $output = @shell_exec($cmd);
+            if ($output !== null) {
+                $ran = true;
+                error_log("[ip-whitelist] propagate via shell: $output");
+            }
+        }
+        // 回退：PHP 直连（shell 不可用时）
+        if (!$ran) {
+            $peerHosts = ['qqcmd.cn', 'nowcoding.cn', 'ktcoding.cn'];
+            $selfHost = $_SERVER['HTTP_HOST'] ?? 'ktcoding.cn';
+            foreach ($peerHosts as $ph) {
+                if ($ph === $selfHost) continue;
+                $scheme = ($ph === 'qqcmd.cn') ? 'http' : 'https';
+                $peerUrl = $scheme . '://' . $ph . '/ipwhitelist/ip_whitelist.php?action=remove&ip=' . urlencode($ip);
+                $ctx = stream_context_create(['http' => ['timeout' => 8, 'ignore_errors' => true,
+                    'header' => "Authorization: Basic " . base64_encode($user . ':' . $pass) .
+                                "\r\nX-Propagated-Delete: 1\r\nX-Requested-With: XMLHttpRequest\r\n"],
+                    'ssl' => ['verify_peer' => false, 'verify_peer_name' => false]]);
+                @file_get_contents($peerUrl, false, $ctx);
+            }
         }
     }
     jsonRespond(['message' => "已删除: $ip (当前 " . count($data['ips']) . " 个条目)", 'type' => 'success']);

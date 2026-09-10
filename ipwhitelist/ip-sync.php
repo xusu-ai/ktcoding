@@ -9,6 +9,8 @@ $peers = [
     "https://nowcoding.cn/ipwhitelist/ip_whitelist.txt",
     "http://ktcoding.cn/ipwhitelist/ip_whitelist.txt",
 ];
+// Basic Auth（与 ip_whitelist.php 保持一致）
+$authHeader = "Authorization: Basic " . base64_encode("opencode:ksqxllup") . "\r\n";
 // 排除自己
 $peers = array_filter($peers, function($u) use ($selfHost) {
     return parse_url($u, PHP_URL_HOST) !== $selfHost;
@@ -30,7 +32,7 @@ $all_entries = $local_set;
 $synced_from = [];
 foreach ($peers as $peer) {
     $ctx = stream_context_create([
-        'http' => ['timeout' => 10, 'ignore_errors' => true],
+        'http' => ['timeout' => 10, 'ignore_errors' => true, 'header' => $authHeader],
         'ssl'  => ['verify_peer' => false, 'verify_peer_name' => false]
     ]);
     $data = @file_get_contents($peer, false, $ctx);
