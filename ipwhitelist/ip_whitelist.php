@@ -44,9 +44,13 @@ if (!file_exists($dataFile)) {
 
 // 文件锁
 function acquireLock($lockFile) {
-    $fp = fopen($lockFile, 'c');
-    if ($fp && flock($fp, LOCK_EX | LOCK_NB)) {
-        return $fp;
+    for ($attempt = 0; $attempt < 50; $attempt++) {
+        $fp = @fopen($lockFile, 'c');
+        if ($fp && flock($fp, LOCK_EX | LOCK_NB)) {
+            return $fp;
+        }
+        if ($fp) fclose($fp);
+        usleep(100000); // 100ms
     }
     return null;
 }
@@ -87,7 +91,12 @@ function writeWhitelist($dataFile, $ips) {
         $content .= $ip . "\n";
     }
     $content .= "\n# last_update: " . date('Y-m-d H:i:s T') . "\n";
-    file_put_contents($dataFile, $content, LOCK_EX);
+    if (file_put_contents($dataFile, $content, LOCK_EX) === false) {
+        http_response_code(500);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['message' => '写入数据文件失败（权限/磁盘错误），请检查服务器日志', 'type' => 'error'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
 }
 
 $action = isset($_GET['action']) ? $_GET['action'] : 'view';
